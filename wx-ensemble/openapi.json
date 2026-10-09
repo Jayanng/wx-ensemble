@@ -7,7 +7,7 @@
     "description": "Returns a descriptive multi-model temperature band for a coordinate, built from independent national forecasting centres. Every member value is reported alongside its source. The band is the observed disagreement between models, not a calibrated probability. Missing upstream values are reported as missing and are never interpolated."
   },
   "servers": [
-    { "url": "https://43-157-25-53.sslip.io", "description": "Pocket supplier endpoint (Beta TestNet)" }
+    { "url": "https://wx-ensemble.duckdns.org", "description": "Pocket supplier endpoint (Beta TestNet)" }
   ],
   "paths": {
     "/v1/ensemble": {

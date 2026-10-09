@@ -25,7 +25,7 @@
 #   pointing gateways at the old name.
 set -euo pipefail
 
-OLD_NAME="43-157-25-53.sslip.io"
+OLD_NAME="wx-ensemble.duckdns.org"
 ENV_FILE="/etc/pocket-relay-miner/duckdns.env"
 WORK="/home/ubuntu/pocket-hackathon/wx-ensemble"
 

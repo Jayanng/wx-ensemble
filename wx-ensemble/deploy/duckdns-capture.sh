@@ -74,7 +74,7 @@ PY
     echo "================================================================"
     echo "  OPEN THIS LINK ON YOUR PHONE AND PASTE THE TOKEN THERE:"
     echo
-    echo "     https://43-157-25-53.sslip.io/${PATH_TOKEN}"
+    echo "     https://wx-ensemble.duckdns.org/${PATH_TOKEN}"
     echo
     echo "  It closes itself after one submission, or after 10 minutes."
     echo "  Do not send the token here in chat."

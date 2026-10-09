@@ -53,7 +53,7 @@ See [`wx-ensemble/README.md`](wx-ensemble/README.md) for the full contract.
 | Service card | `pocket-service-card/v1`, 3,538 bytes, validates clean |
 | Test transaction | `9B2A4E88DD292C990EDF4D8431A1EF91C9C51B608DC1BCAC2E9B9E47DF8E7A8D` |
 | Test transaction | height 718413, code 0, `/pocket.proof.MsgCreateClaim` |
-| Endpoint | `https://43-157-25-53.sslip.io` |
+| Endpoint | `https://wx-ensemble.duckdns.org` |
 
 ---
 

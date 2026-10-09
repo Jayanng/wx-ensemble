@@ -17,5 +17,5 @@ stake_amount: 60000000000upokt
 services:
   - service_id: wx-ensemble
     endpoints:
-      - publicly_exposed_url: https://43-157-25-53.sslip.io
+      - publicly_exposed_url: https://wx-ensemble.duckdns.org
         rpc_type: REST
