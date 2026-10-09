@@ -1,0 +1,16 @@
+# Secrets and local state. Never commit any of these.
+*.env
+*.key
+*.pem
+app.env
+supplier-keys*.yaml
+**/supplier-keys*.yaml
+node_modules/
+*.log
+
+# Build plans, decisions, risk registers and agent working notes. These are
+# internal process material and are not part of what the repo publishes.
+internal/
+
+# OS noise
+.DS_Store

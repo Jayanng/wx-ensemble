@@ -1,0 +1,21 @@
+# pocket-ap config for sending test relays against our own wx-ensemble supplier.
+#
+# The application private key is NOT in this file. pocket-ap reads it from the
+# POCKET_APP_PRIVATE_KEY environment variable, so this file is safe to commit.
+# On the box it lives in /etc/pocket-relay-miner/app.env (mode 0600).
+#
+# pocket-ap is the app-side counterpart of the RelayMiner. Where the RelayMiner
+# is the SUPPLIER side (serves relays, signs responses, submits claims and
+# proofs), pocket-ap is the APPLICATION side (signs relay requests, selects
+# suppliers, retries and fails over). Keeping them separate is exactly the
+# app/gateway/supplier split the network is built on.
+
+app:
+  private_key_hex: ""
+  # Assert at startup that this key is the app staked for wx-ensemble. pocket-ap
+  # refuses to run on a mismatch, so a wrong key cannot quietly send relays
+  # against somebody else's service.
+  service_id: "wx-ensemble"
+
+# Use the public Beta TestNet full nodes operated by Pocket Network Foundation.
+network: beta

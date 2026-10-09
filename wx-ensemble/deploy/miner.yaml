@@ -1,0 +1,38 @@
+# Miner config for wx-ensemble on Pocket Beta TestNet.
+#
+# Validated with:
+#   pocket-relay-miner miner validate --config /etc/pocket-relay-miner/miner.yaml
+#
+# The miner consumes mined relays from Redis Streams, builds SMST claim trees,
+# and submits claims and proofs on chain. This is what earns against the stake.
+
+# The same Redis as the relayer's.
+redis:
+  url: "redis://127.0.0.1:6379"
+
+# The chain node the miner reads from and submits claims and proofs to.
+pocket_node:
+  # Beta public Sauron endpoints. Mainnet: sauron-rpc.infra.pocket.network
+  query_node_rpc_url: "https://sauron-rpc.beta.infra.pocket.network"
+  query_node_grpc_url: "sauron-grpc.beta.infra.pocket.network:443"
+  # The miner refuses to start if the node reports another network.
+  chain_id: "pocket-lego-testnet"
+  grpc_insecure: false
+
+# Same keys as the relayer's.
+keys:
+  keys_file: "/etc/pocket-relay-miner/supplier-keys.yaml"
+
+# MEASURED on this network over a 120 second window: 4 blocks advanced, so
+# 30.00 seconds per block. The docs describe beta as "roughly 30", which agrees.
+# The miner refuses to start without this value.
+block_time_seconds: 30
+
+# Prometheus metrics and GET /health.
+metrics:
+  enabled: true
+  addr: "127.0.0.1:9092"
+
+logging:
+  level: "info"
+  format: "json"

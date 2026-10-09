@@ -1,0 +1,49 @@
+[Unit]
+Description=Pocket RelayMiner Relayer (wx-ensemble)
+Documentation=https://github.com/pokt-network/pocket-relay-miner
+After=network-online.target redis-server.service
+Wants=network-online.target
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+# NOT /etc/pocket-relay-miner. That directory holds supplier-keys.yaml and
+# app.env, and the relayer is internet-facing. WorkingDirectory must not be a
+# directory the process can write to.
+WorkingDirectory=/var/lib/pocket-relay-miner
+ExecStart=/usr/local/bin/pocket-relay-miner relayer --config /etc/pocket-relay-miner/relayer.yaml --redis-url redis://127.0.0.1:6379
+Restart=always
+RestartSec=5
+
+# This host has 2 CPU and 3.6 GB RAM. The upstream examples assume 4G and 8G.
+# Sized down to fit, and the Go soft limit sits about 10 percent below MemoryMax.
+Environment=GOMAXPROCS=2
+Environment=GOMEMLIMIT=460MiB
+MemoryMax=512M
+MemorySwapMax=256M
+CPUQuota=100%
+
+# Hardening. ProtectSystem=strict already mounts /etc read-only, which is what
+# keeps supplier-keys.yaml and app.env unreadable-for-writing to this process.
+# There must be NO WriteReadPaths entry for /etc/pocket-relay-miner: adding one
+# would remove that protection over the directory holding the private keys. The
+# relayer keeps no local state and needs no writable path at all.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallFilter=@system-service
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pocket-relayer
+
+[Install]
+WantedBy=multi-user.target

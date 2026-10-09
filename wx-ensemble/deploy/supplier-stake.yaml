@@ -1,0 +1,21 @@
+# Supplier staking config for wx-ensemble on Pocket Beta TestNet.
+#
+# On this network the minimum supplier stake is 59,500 POKT
+# (59500000000upokt), which was confirmed by the chain rejecting a smaller
+# amount with: "supplier with owner ... must stake at least 59500000000upokt".
+# 60,000 POKT is used to sit clearly above that floor.
+#
+# Custodial form: owner and operator are the same account. The operator key
+# signs relay responses and submits claims and proofs, and it also receives the
+# rewards.
+
+owner_address: pokt1ljj5y4huusjgfjafj6jtq6353uvu5v8u6fgpmr
+operator_address: pokt1ljj5y4huusjgfjafj6jtq6353uvu5v8u6fgpmr
+
+stake_amount: 60000000000upokt
+
+services:
+  - service_id: wx-ensemble
+    endpoints:
+      - publicly_exposed_url: https://43-157-25-53.sslip.io
+        rpc_type: REST

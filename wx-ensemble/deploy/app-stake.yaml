@@ -1,0 +1,19 @@
+# Application staking config for the wx-ensemble test relay.
+#
+# Pocket separates what is served (a service, owned by a service owner and served
+# by suppliers) from who pays and routes (an application, delegated to a gateway).
+# This application pays for relays against the wx-ensemble service. Its private key
+# signs every relay request; that signature is the per-relay audit evidence.
+#
+# Network minimum application stake is 1000000000upokt (1,000 POKT), read from
+# chain. 2,500 POKT is used here.
+#
+# NB: the account must hold stake PLUS the gas fee. A first attempt at 3,000 POKT
+# with a 3,000 POKT balance was rejected on delivery with
+# "spendable balance 2999857625upokt is smaller than 3000000000upokt".
+
+stake_amount: "2500000000upokt"
+service_ids:
+  - "wx-ensemble"
+gateway_addresses:
+  - "pokt1fx6ay9jrgu5zz48whedtelk5fa7jsxyvkqauk2"

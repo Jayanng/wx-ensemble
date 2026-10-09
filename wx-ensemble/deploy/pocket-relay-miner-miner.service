@@ -1,0 +1,44 @@
+[Unit]
+Description=Pocket RelayMiner Miner (wx-ensemble)
+Documentation=https://github.com/pokt-network/pocket-relay-miner
+After=network-online.target redis-server.service
+Wants=network-online.target
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/var/lib/pocket-relay-miner
+ExecStart=/usr/local/bin/pocket-relay-miner miner --config /etc/pocket-relay-miner/miner.yaml --redis-url redis://127.0.0.1:6379
+Restart=always
+RestartSec=5
+
+# Sized for this host: 2 CPU, 3.6 GB RAM. The upstream examples assume 8G for
+# the miner; this is scaled to fit alongside the relayer and Redis.
+Environment=GOMAXPROCS=2
+Environment=GOMEMLIMIT=720MiB
+MemoryMax=800M
+MemorySwapMax=384M
+CPUQuota=100%
+
+# The miner keeps a write-ahead log for crash recovery, so it needs one
+# writable path. Everything else is read-only.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/pocket-relay-miner
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallFilter=@system-service
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pocket-miner
+
+[Install]
+WantedBy=multi-user.target

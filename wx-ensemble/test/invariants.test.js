@@ -1,0 +1,261 @@
+'use strict';
+
+/**
+ * Invariant tests for the anti-fabrication contract.
+ *
+ * These exist because the original suite passed even while the engine published
+ * spread_celsius 0 on a single-member refusal: the assertion was simply not
+ * written. Every claim the README makes about what the service does NOT do is
+ * asserted here, so a regression fails the build rather than shipping.
+ */
+
+const test = require('node:test');
+const assert = require('node:assert');
+
+const { aggregatePoint, buildEnsemble, MIN_MEMBERS } = require('../src/ensemble');
+const { parseRequest } = require('../src/server');
+
+// ---------------------------------------------------------------------------
+// refusal publishes NO band statistics
+// ---------------------------------------------------------------------------
+
+test('a single-member refusal publishes no band statistics at all', () => {
+  const out = aggregatePoint([
+    { source: 'a', value: 10.0 },
+    { source: 'b', value: null },
+    { source: 'c', value: null },
+  ]);
+
+  assert.equal(out.status, 'INSUFFICIENT_EVIDENCE');
+  assert.equal(out.members_present, 1);
+
+  // The band statistics must all be null. Any number here would read as a
+  // measurement the service does not have.
+  assert.equal(out.min_celsius, null, 'min must be null on refusal');
+  assert.equal(out.max_celsius, null, 'max must be null on refusal');
+  assert.equal(out.median_celsius, null, 'median must be null on refusal');
+  assert.equal(out.mean_celsius, null, 'mean must be null on refusal');
+  assert.equal(out.stddev_celsius, null, 'stddev must be null on refusal');
+  assert.equal(out.iqr_celsius, null, 'iqr must be null on refusal');
+  assert.equal(out.spread_celsius, null, 'spread must be null on refusal, never 0');
+  assert.equal(out.agreement_ratio, null, 'agreement must be null on refusal');
+  assert.equal(out.confidence, 'unquantified');
+
+  // The reading that DOES exist is still published, named and sourced.
+  assert.equal(out.values.length, 1);
+  assert.equal(out.values[0].source, 'a');
+  assert.equal(out.values[0].celsius, 10);
+});
+
+test('a refusal never reports a spread of zero', () => {
+  // The specific historical bug: spread_celsius was 0 for a single member,
+  // which reads as "every model agrees perfectly" when only one spoke.
+  const out = aggregatePoint([{ source: 'only', value: 21.5 }]);
+  assert.notEqual(out.spread_celsius, 0);
+  assert.equal(out.spread_celsius, null);
+});
+
+test('a total outage reports UNAVAILABLE and publishes nothing numeric', () => {
+  const out = aggregatePoint([
+    { source: 'a', value: null },
+    { source: 'b', value: null },
+  ]);
+  assert.equal(out.status, 'UNAVAILABLE');
+  for (const k of ['min_celsius', 'max_celsius', 'median_celsius', 'mean_celsius',
+                   'stddev_celsius', 'iqr_celsius', 'spread_celsius', 'agreement_ratio']) {
+    assert.equal(out[k], null, `${k} must be null when nothing reported`);
+  }
+  assert.equal(out.values.length, 0);
+  assert.equal(out.missing.length, 2);
+});
+
+// ---------------------------------------------------------------------------
+// agreement_ratio is degenerate below three members
+// ---------------------------------------------------------------------------
+
+test('agreement_ratio is null for exactly two members, however far apart', () => {
+  // 0 C and 100 C: wildly split, yet the old formula returned 1.0.
+  const out = aggregatePoint([
+    { source: 'a', value: 0 },
+    { source: 'b', value: 100 },
+  ]);
+  assert.equal(out.status, 'OBSERVED');
+  assert.equal(out.members_present, 2);
+  assert.equal(out.agreement_ratio, null,
+    'two members can never disagree under this metric, so it must not be published');
+});
+
+test('agreement_ratio is published for three or more members', () => {
+  const out = aggregatePoint([
+    { source: 'a', value: 10 },
+    { source: 'b', value: 10.1 },
+    { source: 'c', value: 10.2 },
+    { source: 'd', value: 10.15 },
+  ]);
+  assert.equal(out.status, 'OBSERVED');
+  assert.equal(typeof out.agreement_ratio, 'number');
+  assert.ok(out.agreement_ratio >= 0 && out.agreement_ratio <= 1);
+});
+
+test('agreement_ratio is null below MIN_MEMBERS and the threshold is 2', () => {
+  assert.equal(MIN_MEMBERS, 2);
+  const out = aggregatePoint([{ source: 'a', value: 5 }]);
+  assert.equal(out.agreement_ratio, null);
+});
+
+// ---------------------------------------------------------------------------
+// summary never coerces null agreement to zero
+// ---------------------------------------------------------------------------
+
+test('mean_agreement_ratio ignores points that have no agreement value', () => {
+  // Two points: one with two members (no agreement), one with three.
+  const series = [
+    {
+      source: 's1', label: 'S1',
+      values: [
+        { time: '2026-01-01T00:00:00Z', celsius: 10 },
+        { time: '2026-01-01T01:00:00Z', celsius: 10 },
+      ],
+    },
+    {
+      source: 's2', label: 'S2',
+      values: [{ time: '2026-01-01T00:00:00Z', celsius: 11 }],
+    },
+    {
+      source: 's3', label: 'S3',
+      values: [{ time: '2026-01-01T01:00:00Z', celsius: 12 }],
+    },
+  ];
+
+  const out = buildEnsemble({
+    latitude: 0, longitude: 0, hours: 2,
+    requestedAtUtc: '2026-01-01T00:00:00Z',
+    modelSeries: series, sourceErrors: [],
+  });
+
+  const withBand = out.points.filter((p) => p.status === 'OBSERVED');
+  assert.ok(withBand.length >= 1, 'expected at least one band point');
+
+  // Points with fewer than three members must not contribute a zero to the mean.
+  for (const p of withBand) {
+    if (p.members_present < 3) {
+      assert.equal(p.agreement_ratio, null);
+    }
+  }
+  if (typeof out.summary.mean_agreement_ratio === 'number') {
+    assert.ok(out.summary.mean_agreement_ratio > 0,
+      'a mean dragged to 0 by coerced nulls would show up here');
+    assert.ok(out.summary.agreement_sample_size >= 1);
+    assert.ok(out.summary.agreement_sample_size <= withBand.length);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// a failed source is still a member, reported as missing
+// ---------------------------------------------------------------------------
+
+test('a source with no values is counted as missing at every point, not dropped', () => {
+  const series = [
+    { source: 's1', label: 'S1', values: [{ time: '2026-01-01T00:00:00Z', celsius: 10 }] },
+    // A source that failed entirely: values null.
+    { source: 's2', label: 'S2', values: null, error: 'upstream down' },
+  ];
+
+  const out = buildEnsemble({
+    latitude: 0, longitude: 0, hours: 1,
+    requestedAtUtc: '2026-01-01T00:00:00Z',
+    modelSeries: series, sourceErrors: [{ source: 's2', error: 'upstream down' }],
+  });
+
+  assert.equal(out.points.length, 1);
+  const p = out.points[0];
+  // s2 must appear as missing, so members_missing reflects the real outage.
+  assert.equal(p.members_missing, 1, 'the failed source must be reported missing');
+  assert.equal(p.missing.length, 1);
+  assert.equal(p.missing[0].source, 's2');
+  assert.equal(p.status, 'INSUFFICIENT_EVIDENCE');
+  // Both sources are described in the sources list.
+  assert.equal(out.sources.length, 2);
+});
+
+test('a failed source reports an outage reason, not a silent gap', () => {
+  const out = buildEnsemble({
+    latitude: 0, longitude: 0, hours: 1,
+    requestedAtUtc: '2026-01-01T00:00:00Z',
+    modelSeries: [
+      { source: 'ok', label: 'OK', values: [{ time: '2026-01-01T00:00:00Z', celsius: 10 }] },
+      { source: 'broken', label: 'Broken', values: null, error: 'upstream HTTP 503' },
+    ],
+    sourceErrors: [{ source: 'broken', error: 'upstream HTTP 503' }],
+  });
+
+  const p = out.points[0];
+  const m = p.missing.find((x) => x.source === 'broken');
+  assert.ok(m, 'the failed source must be listed as missing');
+  assert.match(m.reason, /failed/i,
+    'an outage must not read as "did not report this time point"');
+  assert.match(m.reason, /503/, 'the underlying cause should be carried through');
+});
+
+// ---------------------------------------------------------------------------
+// request validation matches the OpenAPI contract
+// ---------------------------------------------------------------------------
+
+test('an unrecognised request field is rejected, not silently ignored', () => {
+  // openapi.json says additionalProperties:false. A caller who misspells "hours"
+  // must be told, not quietly given the default horizon.
+  const r = parseRequest(JSON.stringify({ latitude: 1, longitude: 2, hour: 3 }));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Unrecognised field/);
+  assert.match(r.error, /hour/);
+});
+
+test('every documented field is still accepted', () => {
+  const r = parseRequest(JSON.stringify({ latitude: 1, longitude: 2, hours: 3 }));
+  assert.equal(r.ok, true);
+  assert.equal(r.value.hours, 3);
+});
+
+test('hours defaults to 6 and bounds are enforced', () => {
+  assert.equal(parseRequest(JSON.stringify({ latitude: 1, longitude: 2 })).value.hours, 6);
+  assert.equal(parseRequest(JSON.stringify({ latitude: 1, longitude: 2, hours: 0 })).ok, false);
+  assert.equal(parseRequest(JSON.stringify({ latitude: 1, longitude: 2, hours: 25 })).ok, false);
+  assert.equal(parseRequest(JSON.stringify({ latitude: 1, longitude: 2, hours: 1.5 })).ok, false);
+});
+
+test('out of range coordinates are rejected', () => {
+  assert.equal(parseRequest(JSON.stringify({ latitude: 91, longitude: 0 })).ok, false);
+  assert.equal(parseRequest(JSON.stringify({ latitude: 0, longitude: 181 })).ok, false);
+  assert.equal(parseRequest(JSON.stringify({ latitude: 'x', longitude: 0 })).ok, false);
+});
+
+// ---------------------------------------------------------------------------
+// sources[] describes the window, not the whole upstream payload
+// ---------------------------------------------------------------------------
+
+test('sources reports forecast points inside the requested window only', () => {
+  const longSeries = [];
+  for (let i = 0; i < 48; i += 1) {
+    longSeries.push({
+      time: new Date(Date.parse('2026-01-01T00:00:00Z') + i * 3600_000).toISOString().replace('.000Z', 'Z'),
+      celsius: 10,
+    });
+  }
+  const out = buildEnsemble({
+    latitude: 0, longitude: 0, hours: 2,
+    requestedAtUtc: '2026-01-01T00:00:00Z',
+    modelSeries: [
+      { source: 's1', label: 'S1', values: longSeries },
+      { source: 's2', label: 'S2', values: longSeries },
+    ],
+    sourceErrors: [],
+  });
+
+  assert.equal(out.points.length, 2, 'the window is 2 hours');
+  for (const s of out.sources) {
+    assert.equal(s.forecast_points_in_window, 2,
+      'a 48-slice upstream must report 2 points for a 2 hour window, not 48');
+    assert.equal(s.members_returned, undefined,
+      'the old ambiguous field name must be gone');
+  }
+});

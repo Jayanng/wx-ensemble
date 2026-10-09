@@ -1,0 +1,88 @@
+{
+  "schema": "pocket-service-card/v1",
+  "description": "Returns a descriptive multi-model temperature band for a coordinate, built from independent national forecasting centres. Six models arrive in one Open-Meteo call: ICON (Deutscher Wetterdienst), GFS (NOAA), IFS (ECMWF), GEM (Environment and Climate Change Canada), ARPEGE (Meteo-France) and JMA (Japan Meteorological Agency), cross-checked against the Norwegian Meteorological Institute and, inside the US, the NOAA National Weather Service. Request is a JSON object with latitude, longitude and an optional hour horizon of 1 to 24. Response is a JSON object with one entry per hour. Each entry names every member value and its source, then reports min, max, median, mean, sample standard deviation, interquartile range, observed spread, an agreement ratio, and a confidence label explicitly marked as derived from the spread rather than a probability. Missing upstream values are reported as missing and excluded from the statistics; nothing is interpolated, back-filled or coerced to zero. When fewer than two models report a point the service refuses to publish a band and returns INSUFFICIENT_EVIDENCE with a stated reason, because one model cannot express uncertainty. Aggregation is deterministic given the upstream values, and the response records its own method so nothing is taken on trust.",
+  "rpc_types": [
+    {
+      "type": "REST",
+      "intent": "expected",
+      "backend_hint": "rest, plain HTTP JSON",
+      "notes": "Every response is a JSON object. All inputs arrive in the body. No caller authentication."
+    }
+  ],
+  "apis": [
+    "wx-ensemble-api"
+  ],
+  "specs": [
+    {
+      "kind": "openapi",
+      "api": "wx-ensemble-api",
+      "url": "https://43-157-25-53.sslip.io/openapi.json",
+      "sha256": "0484700983867fb95a07f6a15f170c64cea03b2d9b79dc385ac3efb38b2fa0ad"
+    }
+  ],
+  "access": "public",
+  "results": "variable",
+  "serving": {
+    "backend": "A small Node.js HTTP service with no dependencies beyond the standard library. It fans out to public weather endpoints, normalises their timestamps to a common UTC hour, aligns every source on the same clock-derived window, and returns the observed multi-model spread. Aggregation is deterministic, but upstream forecasts change continuously, so two suppliers answering at different moments legitimately differ. That is why results is variable rather than deterministic.",
+    "implementations": [
+      "nodejs >= 22"
+    ],
+    "docs": "https://github.com/Jayanng/pocket-hackathon/blob/main/wx-ensemble/README.md",
+    "min_disk_gb": 1,
+    "min_ram_gb": 1,
+    "healthcheck": [
+      {
+        "rpc_type": "REST",
+        "request": {
+          "method": "GET",
+          "path": "/healthz"
+        },
+        "expect": {
+          "json_path": "$.schema",
+          "matches": "^wx-ensemble/v1$"
+        }
+      },
+      {
+        "rpc_type": "REST",
+        "request": {
+          "method": "GET",
+          "path": "/v1/identity"
+        },
+        "expect": {
+          "json_path": "$.service.id",
+          "matches": "^wx-ensemble$"
+        }
+      },
+      {
+        "rpc_type": "REST",
+        "request": {
+          "method": "GET",
+          "path": "/v1/probe"
+        },
+        "expect": {
+          "json_path": "$.status",
+          "matches": "^OK$"
+        }
+      },
+      {
+        "rpc_type": "REST",
+        "request": {
+          "method": "POST",
+          "path": "/v1/ensemble",
+          "body": {
+            "latitude": 51.5074,
+            "longitude": -0.1278,
+            "hours": 2
+          }
+        },
+        "expect": {
+          "json_path": "$.points[0].status",
+          "matches": "^(OBSERVED|INSUFFICIENT_EVIDENCE|UNAVAILABLE)$"
+        }
+      }
+    ],
+    "notes": "Outbound calls go to api.open-meteo.com, api.met.no and api.weather.gov over HTTPS. All free, no API key; the latter two need a descriptive User-Agent. Keep outbound timeout below session length. Cold response about half a second, warm well under one, far inside the measured 615 second session plus grace budget. Do not cache a band without its as-of timestamp."
+  },
+  "docs": "https://github.com/Jayanng/pocket-hackathon/blob/main/wx-ensemble/README.md",
+  "updated": "2026-10-09"
+}

@@ -1,0 +1,65 @@
+# Relayer config for wx-ensemble on Pocket Beta TestNet.
+#
+# Validated with:
+#   pocket-relay-miner relayer validate --config /etc/pocket-relay-miner/relayer.yaml
+#
+# Every value here was either read from chain or measured on this host.
+# Nothing is invented.
+
+# Relay traffic from gateways. TLS is terminated by nginx in front of this,
+# because the RelayMiner serves plain HTTP and audit rules A5 and A6 require the
+# staked endpoint to be https on a hostname with a publicly trusted certificate.
+listen_addr: "127.0.0.1:8080"
+
+# The same Redis as the miner's. All session state lives here.
+redis:
+  url: "redis://127.0.0.1:6379"
+
+# The chain node the relayer reads applications, sessions and params from.
+# Beta public Sauron endpoints. A self-hosted full node is the better choice
+# for claims and proofs you are actually paid for.
+pocket_node:
+  query_node_rpc_url: "https://sauron-rpc.beta.infra.pocket.network"
+  query_node_grpc_url: "sauron-grpc.beta.infra.pocket.network:443"
+  grpc_insecure: false
+
+# The suppliers this relayer signs responses for. Same keys as the miner's.
+keys:
+  keys_file: "/etc/pocket-relay-miner/supplier-keys.yaml"
+
+services:
+  wx-ensemble:
+    validation_mode: eager
+    default_backend: rest
+    backends:
+      rest:
+        # The wx-ensemble Node.js backend on loopback.
+        url: "http://127.0.0.1:8787"
+        health_check:
+          enabled: true
+          endpoint: "/healthz"
+          method: "GET"
+          request_body: ""
+          expected_body: 'wx-ensemble/v1'
+          interval_seconds: 15
+          timeout_seconds: 5
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+
+# GET /ready answers 200 once the relayer can serve relays.
+health_check:
+  enabled: true
+  addr: "127.0.0.1:8081"
+
+metrics:
+  enabled: true
+  addr: "127.0.0.1:9090"
+
+# Profiling server. Kept on loopback: it serves heap and goroutine dumps.
+pprof:
+  enabled: true
+  addr: "127.0.0.1:6060"
+
+logging:
+  level: "info"
+  format: "json"
