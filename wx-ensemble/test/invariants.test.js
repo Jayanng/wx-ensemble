@@ -197,6 +197,66 @@ test('a failed source reports an outage reason, not a silent gap', () => {
   assert.match(m.reason, /503/, 'the underlying cause should be carried through');
 });
 
+test('a bare second-precision timestamp is read as UTC, not host local', () => {
+  // Date.parse("YYYY-MM-DDTHH:MM:SS") with no zone is specified to parse as
+  // HOST LOCAL time. On a UTC+8 box that silently shifts the reading by eight
+  // hours and splits the ensemble. Only a trailing Z makes it unambiguous.
+  const { toUtcHourBucket } = require('../src/time');
+  assert.equal(toUtcHourBucket('2026-10-09T16:00:00'), '2026-10-09T16:00:00Z');
+  assert.equal(toUtcHourBucket('2026-10-09T16:00'), '2026-10-09T16:00:00Z');
+  assert.equal(toUtcHourBucket('2026-10-09T16:00:00Z'), '2026-10-09T16:00:00Z');
+  assert.equal(toUtcHourBucket('2026-10-09T16:00:00+02:00'), '2026-10-09T14:00:00Z');
+});
+
+test('agreement does not lose a boundary member to floating point rounding', () => {
+  // Three evenly spaced values. Each is exactly one sample stddev from the
+  // median, so agreement must be 1.0. Without an epsilon the largest is
+  // excluded and the metric reports 0.667.
+  const out = aggregatePoint([
+    { source: 'a', value: 10.1 },
+    { source: 'b', value: 10.2 },
+    { source: 'c', value: 10.3 },
+  ]);
+  assert.equal(out.status, 'OBSERVED');
+  assert.equal(out.agreement_ratio, 1);
+});
+
+test('unplaceable readings keep the value, not just the timestamp', () => {
+  const out = buildEnsemble({
+    latitude: 0, longitude: 0, hours: 1,
+    requestedAtUtc: '2026-01-01T00:00:00Z',
+    modelSeries: [{
+      source: 's1', label: 'S1',
+      values: [
+        { time: '2026-01-01T00:00:00Z', celsius: 10 },
+        { time: 'not-a-time', celsius: 42.5 },
+      ],
+    }],
+    sourceErrors: [],
+  });
+  assert.equal(out.unplaceable_readings.length, 1);
+  assert.equal(out.unplaceable_readings[0].original_time, 'not-a-time');
+  assert.equal(out.unplaceable_readings[0].celsius, 42.5,
+    'the reading must survive so it is evidence, not deleted');
+});
+
+test('a source outside its geographic coverage is not reported as an outage', () => {
+  const out = buildEnsemble({
+    latitude: 0, longitude: 0, hours: 1,
+    requestedAtUtc: '2026-01-01T00:00:00Z',
+    modelSeries: [
+      { source: 'ok', label: 'OK', values: [{ time: '2026-01-01T00:00:00Z', celsius: 10 }] },
+      { source: 'regional', label: 'Regional', values: null, outOfCoverage: true, error: 'nws points HTTP 404' },
+    ],
+    sourceErrors: [],
+  });
+  const m = out.points[0].missing.find((x) => x.source === 'regional');
+  assert.ok(m);
+  assert.match(m.reason, /coverage/i);
+  assert.doesNotMatch(m.reason, /failed/i,
+    'a coverage boundary must not read as a source failure');
+});
+
 // ---------------------------------------------------------------------------
 // request validation matches the OpenAPI contract
 // ---------------------------------------------------------------------------

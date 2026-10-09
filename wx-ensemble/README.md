@@ -69,29 +69,29 @@ rather than trusted:
 
 ---
 
-## The seven sources
+## The eight sources
 
 Six arrive in a single Open-Meteo call, each from a different national centre:
 
 | Model | Centre |
 |---|---|
-| `icon_seamless` | Deutscher Wetterdienst (Germany) |
-| `gfs_seamless` | NOAA (United States) |
-| `ecmwf_ifs025` | ECMWF (European Centre) |
-| `gem_seamless` | Environment and Climate Change Canada |
-| `meteofrance_seamless` | Meteo-France |
-| `jma_seamless` | Japan Meteorological Agency |
+| `open-meteo:icon_seamless` | Deutscher Wetterdienst (Germany) |
+| `open-meteo:gfs_seamless` | NOAA (United States) |
+| `open-meteo:ecmwf_ifs025` | ECMWF (European Centre) |
+| `open-meteo:gem_seamless` | Environment and Climate Change Canada |
+| `open-meteo:meteofrance_seamless` | Meteo-France |
+| `open-meteo:jma_seamless` | Japan Meteorological Agency |
 
 Cross-checked against two more:
 
 | Source | Centre |
 |---|---|
-| `metno` | Norwegian Meteorological Institute |
-| `nws` | NOAA National Weather Service (United States only) |
+| `met.no` | Norwegian Meteorological Institute |
+| `noaa-nws` | NOAA National Weather Service (United States only) |
 
 They are genuinely independent. That is what makes the spread meaningful: when
-seven national centres that run their own models on their own infrastructure
-disagree, that disagreement is real information.
+eight upstream feeds from separate national centres that run their own models on
+their own infrastructure disagree, that disagreement is real information.
 
 ---
 
@@ -137,7 +137,7 @@ No dependencies beyond Node.js 22.
 
 ```bash
 node src/server.js          # listens on PORT, default 8787
-npm test                    # 27 tests
+npm test                    # 41 tests
 ```
 
 ---

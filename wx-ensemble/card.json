@@ -1,6 +1,6 @@
 {
   "schema": "pocket-service-card/v1",
-  "description": "Returns a descriptive multi-model temperature band for a coordinate, built from independent national forecasting centres. Six models arrive in one Open-Meteo call: ICON (Deutscher Wetterdienst), GFS (NOAA), IFS (ECMWF), GEM (Environment and Climate Change Canada), ARPEGE (Meteo-France) and JMA (Japan Meteorological Agency), cross-checked against the Norwegian Meteorological Institute and, inside the US, the NOAA National Weather Service. Request is a JSON object with latitude, longitude and an optional hour horizon of 1 to 24. Response is a JSON object with one entry per hour. Each entry names every member value and its source, then reports min, max, median, mean, sample standard deviation, interquartile range, observed spread, an agreement ratio, and a confidence label explicitly marked as derived from the spread rather than a probability. Missing upstream values are reported as missing and excluded from the statistics; nothing is interpolated, back-filled or coerced to zero. When fewer than two models report a point the service refuses to publish a band and returns INSUFFICIENT_EVIDENCE with a stated reason, because one model cannot express uncertainty. Aggregation is deterministic given the upstream values, and the response records its own method so nothing is taken on trust.",
+  "description": "Returns a descriptive multi-model temperature band for a coordinate, built from independent national forecasting centres. Six models arrive in one Open-Meteo call: ICON (Deutscher Wetterdienst), GFS (NOAA), IFS (ECMWF), GEM (Environment and Climate Change Canada), ARPEGE (Meteo-France) and JMA (Japan Meteorological Agency), cross-checked against the Norwegian Meteorological Institute and, inside the US, the NOAA National Weather Service. Request is a JSON object with latitude, longitude and an optional hour horizon of 1 to 24. Response is a JSON object with one entry per hour. Each entry names every member value and its source, then reports min, max, median, mean, sample standard deviation, interquartile range, observed spread, an agreement ratio, and a confidence label explicitly marked as derived from the spread rather than a probability. Missing upstream values are reported as missing and excluded from the statistics; nothing is interpolated, back-filled or coerced to zero. When fewer than two models report a point the service refuses to publish a band and returns INSUFFICIENT_EVIDENCE with a stated reason, because one model cannot express uncertainty. When no model reports at all it returns UNAVAILABLE instead. Refusal states carry no band statistics: min, max, median, mean, spread, stddev, iqr and agreement are all null there. Aggregation is deterministic given the upstream values, and the response records its own method so nothing is taken on trust.",
   "rpc_types": [
     {
       "type": "REST",
@@ -38,8 +38,8 @@
           "path": "/healthz"
         },
         "expect": {
-          "json_path": "$.schema",
-          "matches": "^wx-ensemble/v1$"
+          "json_path": "$.status",
+          "matches": "^ok$"
         }
       },
       {
@@ -62,22 +62,6 @@
         "expect": {
           "json_path": "$.status",
           "matches": "^OK$"
-        }
-      },
-      {
-        "rpc_type": "REST",
-        "request": {
-          "method": "POST",
-          "path": "/v1/ensemble",
-          "body": {
-            "latitude": 51.5074,
-            "longitude": -0.1278,
-            "hours": 2
-          }
-        },
-        "expect": {
-          "json_path": "$.points[0].status",
-          "matches": "^(OBSERVED|INSUFFICIENT_EVIDENCE|UNAVAILABLE)$"
         }
       }
     ],

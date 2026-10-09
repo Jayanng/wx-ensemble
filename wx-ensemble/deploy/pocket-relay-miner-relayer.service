@@ -27,7 +27,7 @@ CPUQuota=100%
 
 # Hardening. ProtectSystem=strict already mounts /etc read-only, which is what
 # keeps supplier-keys.yaml and app.env unreadable-for-writing to this process.
-# There must be NO WriteReadPaths entry for /etc/pocket-relay-miner: adding one
+# There must be NO ReadWritePaths entry for /etc/pocket-relay-miner: adding one
 # would remove that protection over the directory holding the private keys. The
 # relayer keeps no local state and needs no writable path at all.
 NoNewPrivileges=true

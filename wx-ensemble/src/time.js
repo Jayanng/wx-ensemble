@@ -26,11 +26,16 @@ function toUtcHourBucket(iso) {
   if (typeof iso !== 'string' || !iso.trim()) return null;
 
   let raw = iso.trim();
-  // A bare "YYYY-MM-DDTHH:MM" from Open-Meteo has no zone. The upstream request
-  // pins timezone=UTC, so this is UTC. Mark it explicitly rather than assuming
-  // the host timezone.
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw)) {
-    raw = `${raw}:00Z`;
+  // A bare "YYYY-MM-DDTHH:MM" or "YYYY-MM-DDTHH:MM:SS" has no zone. The
+  // upstream request pins timezone=UTC, so this is UTC. Mark it explicitly
+  // rather than assuming the host timezone.
+  //
+  // Both precisions must be handled. Date.parse on a bare second-precision
+  // string is specified to parse as HOST LOCAL time, so on a UTC+8 box
+  // "2026-10-09T16:00:00" would silently land eight hours away and split the
+  // ensemble. Only a trailing Z makes it unambiguous.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(raw)) {
+    raw = raw.length === 16 ? `${raw}:00Z` : `${raw}Z`;
   }
 
   const t = Date.parse(raw);

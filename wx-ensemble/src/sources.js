@@ -173,7 +173,11 @@ async function fetchNws(lat, lon, signal) {
     });
     return { ok: true, values, error: null, endpoint: 'api.weather.gov', inCoverage: true };
   } catch (err) {
-    return { ok: false, values: null, error: `nws ${err.name || 'error'}`, inCoverage: false };
+    // A thrown error is a FAULT, not a coverage exclusion. Timeouts, DNS
+    // failures and socket resets happen at coordinates that are perfectly well
+    // covered, and reporting them as "outside coverage" hides a real outage.
+    // Only an HTTP 404 from the /points lookup establishes non-coverage.
+    return { ok: false, values: null, error: `nws ${err.name || 'error'}`, inCoverage: true };
   }
 }
 

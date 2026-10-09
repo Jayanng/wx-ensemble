@@ -150,7 +150,13 @@ function aggregatePoint(entries) {
   } else if (stddev === 0) {
     agreement = 1;
   } else {
-    const inside = values.filter((v) => Math.abs(v - med) <= stddev).length;
+    // EPSILON: the comparison must not lose boundary members to rounding.
+    // For [10.1, 10.2, 10.3] the median is 10.2 and the sample stddev works
+    // out to 0.10000000000000053, while |10.3 - 10.2| is 0.10000000000000142.
+    // Without a tolerance the largest member is excluded and the ratio reports
+    // 0.667 for three values that are perfectly evenly spaced.
+    const EPSILON = 1e-9;
+    const inside = values.filter((v) => Math.abs(v - med) <= stddev + EPSILON).length;
     agreement = inside / n;
   }
 
@@ -194,7 +200,9 @@ function buildEnsemble({ latitude, longitude, hours, requestedAtUtc, modelSeries
   for (const series of modelSeries) {
     const r = normaliseSeries(series.values);
     for (const u of r.unplaceable) {
-      unplaceable.push({ source: series.source, original_time: u.original });
+      // Keep the reading. Dropping the value alongside the timestamp would lose
+      // evidence about what the upstream actually said.
+      unplaceable.push({ source: series.source, original_time: u.original, celsius: u.value ?? null });
     }
     normalised.push({ ...series, values: r.values });
   }
@@ -214,11 +222,18 @@ function buildEnsemble({ latitude, longitude, hours, requestedAtUtc, modelSeries
   }
   const windowSet = new Set(windowKeys);
 
-  for (const series of normalised) {
-    series.values = (series.values || []).filter((v) => windowSet.has(v.time));
+  // Filter to the window ONLY when the window is real. If requestedAtUtc could
+  // not be parsed, windowKeys is empty, and filtering against an empty set would
+  // erase every series before the fallback below ever gets to look at them,
+  // leaving the response with no points at all and no explanation.
+  if (windowKeys.length) {
+    for (const series of normalised) {
+      series.values = (series.values || []).filter((v) => windowSet.has(v.time));
+    }
   }
 
-  // Align on the union of timestamps, in order of first appearance.
+  // Align on the clock window, or on the union of timestamps in order of first
+  // appearance when there is no window to align to.
   const timeIndex = windowKeys.length
     ? windowKeys
     : (() => {
@@ -239,12 +254,16 @@ function buildEnsemble({ latitude, longitude, hours, requestedAtUtc, modelSeries
   const points = timeIndex.map((time) => {
     const entries = normalised.map((s) => {
       const hit = (s.values || []).find((v) => v.time === time);
-      // Distinguish an outage from a gap. A source that failed entirely should
-      // not read as "did not report this time point", which suggests a normal
-      // hole in an otherwise healthy series.
+      // Distinguish three cases. A source that failed entirely should not read
+      // as "did not report this time point", which suggests a normal hole in an
+      // otherwise healthy series. But a source that is simply outside its
+      // geographic coverage is not an outage either, and must not be reported
+      // as one at every forecast hour.
       let missingReason;
       if (hit) {
         missingReason = hit.celsius === null ? 'source returned a null for this time' : null;
+      } else if (s.outOfCoverage) {
+        missingReason = 'outside this source geographic coverage; expected, not a fault';
       } else if (s.error) {
         missingReason = `source failed: ${s.error}`;
       } else {

@@ -24,7 +24,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { fetchOpenMeteo, fetchMetNo, fetchNws, OPEN_METEO_MODELS } = require('./sources');
-const { buildEnsemble, MIN_MEMBERS } = require('./ensemble');
+const { buildEnsemble, aggregatePoint, MIN_MEMBERS } = require('./ensemble');
 
 const SERVICE_ID = 'wx-ensemble';
 const SERVICE_VERSION = '1.0.0';
@@ -170,7 +170,9 @@ async function handleEnsemble(payload) {
       fetchMetNo(payload.latitude, payload.longitude, controller.signal)
         .catch((e) => ({ ok: false, values: null, error: `met.no ${e.name || 'error'}` })),
       fetchNws(payload.latitude, payload.longitude, controller.signal)
-        .catch((e) => ({ ok: false, values: null, error: `nws ${e.name || 'error'}`, inCoverage: false })),
+        // Same reasoning as sources.js: a rejected promise is a fault, and must
+        // not be flattened into "outside coverage".
+        .catch((e) => ({ ok: false, values: null, error: `nws ${e.name || 'error'}`, inCoverage: true })),
     ]);
   } finally {
     clearTimeout(timer);
@@ -225,13 +227,13 @@ async function handleEnsemble(payload) {
     label: 'NOAA National Weather Service',
     values: nws.ok ? nws.values : null,
     error: nws.ok ? null : nws.error,
+    // Being outside the NWS grid is a geographic boundary, not an upstream
+    // fault. It must not be recorded in source_errors, which is defined as
+    // "every upstream failure" and empty when all sources succeeded.
+    outOfCoverage: !nws.ok && nws.inCoverage === false,
   });
-  if (!nws.ok) {
-    sourceErrors.push({
-      source: 'noaa-nws',
-      error: nws.error,
-      note: nws.inCoverage === false ? 'outside NWS coverage; expected, not a fault' : null,
-    });
+  if (!nws.ok && nws.inCoverage !== false) {
+    sourceErrors.push({ source: 'noaa-nws', error: nws.error });
   }
 
   const ensemble = buildEnsemble({
@@ -319,6 +321,9 @@ async function functionalProbe() {
       status: 'FAILED',
       probe: 'functional',
       reason: `ensemble call threw ${err.name || 'error'}`,
+      // The OpenAPI Probe schema requires `checks`. A failure response is still
+      // a response and must honour the contract it publishes.
+      checks: [{ name: 'execution', pass: false }],
       generated_at_utc: new Date().toISOString(),
     };
   }
@@ -344,21 +349,45 @@ async function functionalProbe() {
         .filter((p) => p.status === 'OBSERVED')
         .every((p) => Array.isArray(p.values) && p.values.length >= MIN_MEMBERS),
     },
+    // The refusal assertions must NOT be vacuous. Filtering the live response
+    // for refusals yields an empty array whenever every point is OBSERVED, and
+    // `[].every(...)` is true, so those checks would silently pass forever
+    // without testing anything. Instead a refusal is FORCED with a synthetic
+    // single-member input, so the invariant is exercised on every probe run.
     {
-      name: 'refusals_carry_a_reason',
+      name: 'synthetic_refusal_publishes_no_band_statistics',
+      pass: (() => {
+        const r = aggregatePoint([
+          { source: 'synthetic', value: 1 },
+          { source: 'absent', value: null },
+        ]);
+        return r.status === 'INSUFFICIENT_EVIDENCE'
+          && r.min_celsius === null
+          && r.max_celsius === null
+          && r.median_celsius === null
+          && r.mean_celsius === null
+          && r.stddev_celsius === null
+          && r.iqr_celsius === null
+          && r.spread_celsius === null
+          && r.agreement_ratio === null
+          && r.confidence === 'unquantified';
+      })(),
+    },
+    {
+      name: 'synthetic_refusal_carrys_a_reason',
+      pass: (() => {
+        const r = aggregatePoint([{ source: 'only', value: 5 }]);
+        return typeof r.reason === 'string' && r.reason.length > 0;
+      })(),
+    },
+    // And the live refusals, if any occurred, must obey the same rules. This
+    // check is still worth having, but it is not the only thing standing
+    // between a regression and a shipped fabrication.
+    {
+      name: 'live_refusals_carry_a_reason',
       pass: (result.points || [])
         .filter((p) => p.status !== 'OBSERVED')
         .every((p) => typeof p.reason === 'string' && p.reason.length > 0),
-    },
-    {
-      name: 'refusals_publish_no_band_statistics',
-      pass: (result.points || [])
-        .filter((p) => p.status !== 'OBSERVED')
-        .every((p) =>
-          p.spread_celsius === null &&
-          p.stddev_celsius === null &&
-          p.min_celsius === null &&
-          p.max_celsius === null),
     },
     { name: 'no_interpolation_field', pass: result.method && result.method.interpolation === 'none. A missing member value is reported as missing and excluded from statistics.' },
     { name: 'min_members_documented', pass: result.method && result.method.min_members_required === MIN_MEMBERS },
@@ -388,10 +417,12 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (req.method === 'GET' && (url === '/healthz' || url === '/health')) {
+      // Liveness ONLY. No service name, no schema, nothing that identifies the
+      // service. A health endpoint that echoes the name lets a name-squatter
+      // pass a probe by copying a string, and it leaks identity to any scanner.
+      // Identity is served by /v1/identity, which is checked separately.
       return sendJson(res, 200, {
-        schema: SCHEMA,
-        status: 'OK',
-        service: { id: SERVICE_ID, version: SERVICE_VERSION },
+        status: 'ok',
         generated_at_utc: new Date().toISOString(),
       });
     }
@@ -401,10 +432,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url === '/openapi.json') {
-      let spec;
+      // Serve the file BYTES verbatim, not a re-serialised copy. The on-chain
+      // service card publishes a sha256 of this document, and JSON.stringify of
+      // a parsed object does not reproduce the original bytes (indentation,
+      // key order and number formatting all shift). Re-serialising would make
+      // the published hash unverifiable against what is actually served.
+      let raw;
       try {
-        spec = JSON.parse(fs.readFileSync(OPENAPI_PATH, 'utf8'));
-        return sendJson(res, 200, spec);
+        raw = fs.readFileSync(OPENAPI_PATH);
+        JSON.parse(raw.toString('utf8')); // confirm it is valid JSON before serving
       } catch {
         return sendJson(res, 503, {
           schema: SCHEMA,
@@ -412,6 +448,12 @@ const server = http.createServer(async (req, res) => {
           reason: 'The machine-readable specification is not present on this deployment.',
         });
       }
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'content-length': raw.length,
+        'cache-control': 'no-store',
+      });
+      return res.end(raw);
     }
 
     if (req.method === 'GET' && url === '/v1/probe') {
