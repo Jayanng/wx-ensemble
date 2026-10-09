@@ -35,9 +35,15 @@ services:
       rest:
         # The wx-ensemble Node.js backend on loopback.
         url: "http://127.0.0.1:8787"
+        # The relayer's OWN check that the backend is alive and is the right
+        # service. This is NOT the public /healthz contract.
+        #
+        # It must not read /healthz: that endpoint deliberately returns liveness
+        # with no service name in it, so it cannot be used to confirm identity.
+        # /v1/identity asserts both, and it is what the backend is for.
         health_check:
           enabled: true
-          endpoint: "/healthz"
+          endpoint: "/v1/identity"
           method: "GET"
           request_body: ""
           expected_body: 'wx-ensemble/v1'
