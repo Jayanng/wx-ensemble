@@ -29,6 +29,32 @@ OLD_NAME="43-157-25-53.sslip.io"
 ENV_FILE="/etc/pocket-relay-miner/duckdns.env"
 WORK="/home/ubuntu/pocket-hackathon/wx-ensemble"
 
+if [ ! -f "$ENV_FILE" ]; then
+  cat >&2 <<'HELP'
+BLOCKED: no DuckDNS credentials on this box.
+
+DuckDNS signup is OAuth only, through Google, GitHub, Twitter or Persona.
+There is no self-serve registration and no email/password option.
+
+To unblock:
+  1. Go to https://www.duckdns.org and sign in with one of those four.
+  2. Create a subdomain, for example wx-ensemble  ->  wx-ensemble.duckdns.org
+  3. Copy the token shown on the dashboard.
+  4. Put both values in /etc/pocket-relay-miner/duckdns.env:
+
+       DUCKDNS_DOMAIN=wx-ensemble
+       DUCKDNS_TOKEN=<the token>
+
+     then:  sudo chmod 600 /etc/pocket-relay-miner/duckdns.env
+
+The token is a DNS update credential. Do not paste it into chat. Put it
+straight into that file on the box.
+
+Then run this script again and it completes the whole switch.
+HELP
+  exit 1
+fi
+
 set -a; . "$ENV_FILE"; set +a
 : "${DUCKDNS_DOMAIN:?set DUCKDNS_DOMAIN in $ENV_FILE}"
 : "${DUCKDNS_TOKEN:?set DUCKDNS_TOKEN in $ENV_FILE}"
