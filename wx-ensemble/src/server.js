@@ -461,7 +461,11 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, probe.status === 'OK' ? 200 : 503, probe);
     }
 
-    if (req.method === 'POST' && (url === '/v1/ensemble' || url === '/')) {
+    // ONLY /v1/ensemble. There is deliberately no "/" alias for this call: nginx
+    // routes GET / here to serve the descriptor above, and if POST / were also
+    // an ensemble call it would let anyone invoke the metered endpoint directly
+    // without going through a Pocket relay at all.
+    if (req.method === 'POST' && url === '/v1/ensemble') {
       let raw;
       try {
         raw = await readBody(req);
@@ -474,6 +478,55 @@ const server = http.createServer(async (req, res) => {
       }
       const result = await handleEnsemble(parsed.value);
       return sendJson(res, 200, result);
+    }
+
+    // GET / is the endpoint URL a person will paste into a browser. Without
+    // this it falls through to the relay handler and returns
+    // "invalid relay request: body must be a valid RelayRequest protobuf",
+    // which is correct but tells a first-time visitor nothing. This describes
+    // the service and says plainly how the call is actually made.
+    if (req.method === 'GET' && url === '/') {
+      return sendJson(res, 200, {
+        schema: SCHEMA,
+        status: 'OK',
+        service: {
+          id: SERVICE_ID,
+          name: 'Ensemble Weather Forecast With Multi-Model Spread',
+          version: SERVICE_VERSION,
+        },
+        what_it_does:
+          'Reports how much independent national forecasting centres disagree about ' +
+          'temperature for a coordinate over the next 24 hours. Every member value is ' +
+          'published next to its source. A missing value is reported as missing and is ' +
+          'never interpolated, back-filled or coerced to zero.',
+        readable_here: {
+          '/openapi.json': 'the machine readable contract',
+          '/v1/identity': 'identity probe, pins the service id',
+          '/v1/probe': 'functional probe, runs a real ensemble call and asserts the shape',
+          '/healthz': 'liveness only',
+        },
+        calls_are_relayed: {
+          target: 'POST /v1/ensemble',
+          why:
+            'This is a Pocket Network service. The ensemble call is a metered relay, so it ' +
+            'must arrive as a signed Pocket RelayRequest. A plain browser request cannot ' +
+            'make it, and that rejection is the network working as designed.',
+          how: [
+            'Send a signed relay through any Pocket gateway serving this service.',
+            'Or use the pocket-ap CLI, which signs for you:',
+          ],
+          example:
+            'pocket-ap call --config pocket-ap.yaml --network beta --service wx-ensemble ' +
+            '--rpc-type rest -X POST --path /v1/ensemble ' +
+            "--data '{\"latitude\":51.5074,\"longitude\":-0.1278,\"hours\":12}'",
+          signing_reference:
+            'https://github.com/pokt-network/pocket-relay-miner/tree/main/examples/relay-signing',
+        },
+        network: 'pocket-beta',
+        chain_id: 'pocket-lego-testnet',
+        repository: 'https://github.com/Jayanng/wx-ensemble',
+        generated_at_utc: new Date().toISOString(),
+      });
     }
 
     // Anything else: a JSON object, never an HTML error page.
