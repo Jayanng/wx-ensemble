@@ -461,11 +461,16 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, probe.status === 'OK' ? 200 : 503, probe);
     }
 
-    // ONLY /v1/ensemble. There is deliberately no "/" alias for this call: nginx
-    // routes GET / here to serve the descriptor above, and if POST / were also
-    // an ensemble call it would let anyone invoke the metered endpoint directly
-    // without going through a Pocket relay at all.
-    if (req.method === 'POST' && url === '/v1/ensemble') {
+    // The relay path. The RelayMiner forwards to the backend ROOT and carries
+    // the target path inside the RelayRequest payload, so both forms are
+    // accepted here.
+    //
+    // This is NOT a public bypass, though it looks like one. The backend is
+    // bound to 127.0.0.1 so only the relayer can reach it, and nginx refuses
+    // non-GET on "/" from outside (limit_except GET deny all). Removing the "/"
+    // alias entirely breaks every relay with "proto: illegal wireType", because
+    // the relayer then receives a 404 where it expects a relay response.
+    if (req.method === 'POST' && (url === '/v1/ensemble' || url === '/')) {
       let raw;
       try {
         raw = await readBody(req);
