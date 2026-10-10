@@ -162,6 +162,11 @@ function aggregatePoint(entries) {
 
   // Confidence is a LABEL derived from the observed spread. It is not a
   // probability and is labelled as derived everywhere it appears.
+  //
+  // The breakpoints below are a CONVENTION, not a measurement. Nothing about
+  // the natural world says 2.5 C is "moderate". They are published in the
+  // response under method.confidence_thresholds so the label is reproducible
+  // from the spread alone and nobody has to take it on trust.
   let confidence;
   if (spread <= 1.0) confidence = 'high';
   else if (spread <= 2.5) confidence = 'moderate';
@@ -320,6 +325,15 @@ function buildEnsemble({ latitude, longitude, hours, requestedAtUtc, modelSeries
       min_members_required: MIN_MEMBERS,
       interpolation: 'none. A missing member value is reported as missing and excluded from statistics.',
       confidence_basis: 'derived_from_spread',
+      // The exact breakpoints used for the confidence label. A CONVENTION, not
+      // a measurement, published here so the label is reproducible from
+      // spread_celsius alone.
+      confidence_thresholds_celsius: {
+        high_at_or_below: 1.0,
+        moderate_at_or_below: 2.5,
+        low_at_or_below: 5.0,
+        very_low_above: 5.0,
+      },
       deterministic_aggregation: true,
     },
     // Reported against the WINDOW the caller asked for, not against every

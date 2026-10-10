@@ -257,6 +257,51 @@ test('a source outside its geographic coverage is not reported as an outage', ()
     'a coverage boundary must not read as a source failure');
 });
 
+test('the confidence label is reproducible from the published thresholds', () => {
+  // The breakpoints are a convention. If they are published in the response
+  // they must actually BE the ones used, or the disclosure is worse than none.
+  const out = buildEnsemble({
+    latitude: 0, longitude: 0, hours: 4,
+    requestedAtUtc: '2026-01-01T00:00:00Z',
+    modelSeries: [
+      // point 0: tight spread -> high
+      // point 1: wide spread  -> low
+      { source: 'a', label: 'A', values: [
+        { time: '2026-01-01T00:00:00Z', celsius: 10.0 },
+        { time: '2026-01-01T01:00:00Z', celsius: 10.0 },
+        { time: '2026-01-01T02:00:00Z', celsius: 0.0 },
+        { time: '2026-01-01T03:00:00Z', celsius: 0.0 },
+      ]},
+      { source: 'b', label: 'B', values: [
+        { time: '2026-01-01T00:00:00Z', celsius: 10.2 },
+        { time: '2026-01-01T01:00:00Z', celsius: 10.2 },
+        { time: '2026-01-01T02:00:00Z', celsius: 4.0 },
+        { time: '2026-01-01T03:00:00Z', celsius: 4.0 },
+      ]},
+    ],
+    sourceErrors: [],
+  });
+
+  const t = out.method.confidence_thresholds_celsius;
+  assert.ok(t, 'the thresholds must be published in the response');
+  assert.equal(t.high_at_or_below, 1.0);
+  assert.equal(t.moderate_at_or_below, 2.5);
+  assert.equal(t.low_at_or_below, 5.0);
+
+  for (const p of out.points) {
+    assert.equal(p.confidence_basis, 'derived_from_spread');
+    if (p.status !== 'OBSERVED') continue;
+    const s = p.spread_celsius;
+    const expected =
+      s <= t.high_at_or_below ? 'high'
+      : s <= t.moderate_at_or_below ? 'moderate'
+      : s <= t.low_at_or_below ? 'low'
+      : 'very_low';
+    assert.equal(p.confidence, expected,
+      `spread ${s} must map to ${expected} using the published thresholds`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // request validation matches the OpenAPI contract
 // ---------------------------------------------------------------------------
