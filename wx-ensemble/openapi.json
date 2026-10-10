@@ -7,7 +7,10 @@
     "description": "Returns a descriptive multi-model temperature band for a coordinate, built from independent national forecasting centres. Every member value is reported alongside its source. The band is the observed disagreement between models, not a calibrated probability. Missing upstream values are reported as missing and are never interpolated."
   },
   "servers": [
-    { "url": "https://wx-ensemble.duckdns.org", "description": "Pocket supplier endpoint (Beta TestNet)" }
+    {
+      "url": "https://wx-ensemble.duckdns.org",
+      "description": "Pocket supplier endpoint (Beta TestNet)"
+    }
   ],
   "paths": {
     "/v1/ensemble": {
@@ -19,11 +22,17 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/EnsembleRequest" },
+              "schema": {
+                "$ref": "#/components/schemas/EnsembleRequest"
+              },
               "examples": {
                 "london": {
                   "summary": "London, 6 hour horizon",
-                  "value": { "latitude": 51.5074, "longitude": -0.1278, "hours": 6 }
+                  "value": {
+                    "latitude": 51.5074,
+                    "longitude": -0.1278,
+                    "hours": 6
+                  }
                 }
               }
             }
@@ -33,16 +42,32 @@
           "200": {
             "description": "Ensemble computed. Inspect each point's status: OBSERVED carries a band, INSUFFICIENT_EVIDENCE or UNAVAILABLE does not.",
             "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/EnsembleResponse" } }
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnsembleResponse"
+                }
+              }
             }
           },
           "400": {
             "description": "Payload rejected. Returns status REJECTED with a reason and details.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rejection" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            }
           },
           "500": {
             "description": "Service could not complete the request. Returns status UNAVAILABLE.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rejection" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            }
           }
         }
       }
@@ -55,7 +80,13 @@
         "responses": {
           "200": {
             "description": "Service identity.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Identity" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
           }
         }
       }
@@ -68,11 +99,23 @@
         "responses": {
           "200": {
             "description": "All probe checks passed.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Probe" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Probe"
+                }
+              }
+            }
           },
           "503": {
             "description": "One or more probe checks failed.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Probe" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Probe"
+                }
+              }
+            }
           }
         }
       }
@@ -85,7 +128,27 @@
         "responses": {
           "200": {
             "description": "Process is alive.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Identity" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status"
+                  ],
+                  "description": "Liveness only. Deliberately NOT the Identity schema: this endpoint carries no service name and no schema id, so a scanner cannot fingerprint the service from it and a name-squatter cannot pass a check by echoing a string. Identity is served at /v1/identity.",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    },
+                    "generated_at_utc": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -95,175 +158,450 @@
     "schemas": {
       "EnsembleRequest": {
         "type": "object",
-        "required": ["latitude", "longitude"],
+        "required": [
+          "latitude",
+          "longitude"
+        ],
         "additionalProperties": false,
         "properties": {
-          "latitude": { "type": "number", "minimum": -90, "maximum": 90, "description": "WGS84 latitude in decimal degrees." },
-          "longitude": { "type": "number", "minimum": -180, "maximum": 180, "description": "WGS84 longitude in decimal degrees." },
-          "hours": { "type": "integer", "minimum": 1, "maximum": 24, "default": 6, "description": "Number of hourly points to return. The window starts at the current UTC hour, that is the hour already in progress at request time, and runs for `hours` whole hours. It is not offset to the next hour." }
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "WGS84 latitude in decimal degrees."
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "WGS84 longitude in decimal degrees."
+          },
+          "hours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 6,
+            "description": "Number of hourly points to return. The window starts at the current UTC hour, that is the hour already in progress at request time, and runs for `hours` whole hours. It is not offset to the next hour."
+          }
         }
       },
       "MemberValue": {
         "type": "object",
-        "required": ["source", "celsius"],
+        "required": [
+          "source",
+          "celsius"
+        ],
         "properties": {
-          "source": { "type": "string", "description": "Upstream identifier, for example open-meteo:gfs_seamless." },
-          "celsius": { "type": ["number", "null"], "description": "Temperature in degrees Celsius. null when the upstream returned no numeric value." }
+          "source": {
+            "type": "string",
+            "description": "Upstream identifier, for example open-meteo:gfs_seamless."
+          },
+          "celsius": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Temperature in degrees Celsius. null when the upstream returned no numeric value."
+          }
         }
       },
       "MissingMember": {
         "type": "object",
-        "required": ["source", "reason"],
+        "required": [
+          "source",
+          "reason"
+        ],
         "properties": {
-          "source": { "type": "string" },
-          "reason": { "type": "string", "description": "Why this member contributed nothing. Never silently dropped." }
+          "source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this member contributed nothing. Never silently dropped."
+          }
         }
       },
       "Point": {
         "type": "object",
-        "required": ["time", "status", "members_present", "members_missing"],
+        "required": [
+          "time",
+          "status",
+          "members_present",
+          "members_missing"
+        ],
         "properties": {
-          "time": { "type": "string", "format": "date-time", "description": "ISO 8601 UTC." },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 UTC."
+          },
           "status": {
             "type": "string",
-            "enum": ["OBSERVED", "INSUFFICIENT_EVIDENCE", "UNAVAILABLE"],
+            "enum": [
+              "OBSERVED",
+              "INSUFFICIENT_EVIDENCE",
+              "UNAVAILABLE"
+            ],
             "description": "OBSERVED carries a band. The other two are refusals with a reason, and carry no band."
           },
-          "reason": { "type": ["string", "null"] },
-          "members_present": { "type": "integer" },
-          "members_missing": { "type": "integer" },
-          "values": { "type": "array", "items": { "$ref": "#/components/schemas/MemberValue" } },
-          "missing": { "type": "array", "items": { "$ref": "#/components/schemas/MissingMember" } },
-          "min_celsius": { "type": ["number", "null"] },
-          "max_celsius": { "type": ["number", "null"] },
-          "median_celsius": { "type": ["number", "null"] },
-          "mean_celsius": { "type": ["number", "null"] },
-          "stddev_celsius": { "type": ["number", "null"] },
-          "iqr_celsius": { "type": ["number", "null"] },
-          "spread_celsius": { "type": ["number", "null"] },
-          "agreement_ratio": { "type": ["number", "null"], "description": "Fraction of members within one standard deviation of the median. null when fewer than three members reported: for two members the metric is mathematically always 1.0 regardless of how far apart they are, so publishing it would claim agreement that was never tested." },
-          "confidence": { "type": "string", "enum": ["high", "moderate", "low", "very_low", "unquantified"] },
-          "confidence_basis": { "type": "string", "const": "derived_from_spread" }
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "members_present": {
+            "type": "integer"
+          },
+          "members_missing": {
+            "type": "integer"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberValue"
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MissingMember"
+            }
+          },
+          "min_celsius": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max_celsius": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "median_celsius": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mean_celsius": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "stddev_celsius": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "iqr_celsius": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "spread_celsius": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "agreement_ratio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fraction of members within one standard deviation of the median. null when fewer than three members reported: for two members the metric is mathematically always 1.0 regardless of how far apart they are, so publishing it would claim agreement that was never tested."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "moderate",
+              "low",
+              "very_low",
+              "unquantified"
+            ]
+          },
+          "confidence_basis": {
+            "type": "string",
+            "const": "derived_from_spread"
+          }
         }
       },
       "EnsembleResponse": {
         "type": "object",
-        "required": ["schema", "status", "points"],
+        "required": [
+          "schema",
+          "status",
+          "points"
+        ],
         "properties": {
-          "schema": { "type": "string", "const": "wx-ensemble/v1" },
-          "status": { "type": "string", "enum": ["OK", "UNAVAILABLE"] },
-          "summary_line": { "type": "string" },
-          "generated_at_utc": { "type": "string", "format": "date-time" },
-          "latency_ms": { "type": "integer" },
+          "schema": {
+            "type": "string",
+            "const": "wx-ensemble/v1"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "UNAVAILABLE"
+            ]
+          },
+          "summary_line": {
+            "type": "string"
+          },
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "latency_ms": {
+            "type": "integer"
+          },
           "location": {
             "type": "object",
             "properties": {
-              "latitude": { "type": "number" },
-              "longitude": { "type": "number" }
+              "latitude": {
+                "type": "number"
+              },
+              "longitude": {
+                "type": "number"
+              }
             }
           },
-          "horizon_hours": { "type": "integer" },
+          "horizon_hours": {
+            "type": "integer"
+          },
           "method": {
             "type": "object",
             "description": "How the band was produced, stated in full so nothing is taken on trust.",
             "properties": {
-              "description": { "type": "string" },
-              "min_members_required": { "type": "integer" },
-              "interpolation": { "type": "string" },
-              "confidence_basis": { "type": "string" },
-              "deterministic_aggregation": { "type": "boolean" }
+              "description": {
+                "type": "string"
+              },
+              "min_members_required": {
+                "type": "integer"
+              },
+              "interpolation": {
+                "type": "string"
+              },
+              "confidence_basis": {
+                "type": "string"
+              },
+              "deterministic_aggregation": {
+                "type": "boolean"
+              }
             }
           },
           "sources": {
             "type": "array",
-            "description": "One entry per configured upstream, INCLUDING any that failed. A failed source appears here with values null and an error, and is counted as missing at every time point rather than vanishing from the response.",
+            "description": "One entry per configured upstream, INCLUDING any that failed. A failed source appears here with forecast_points_in_window 0 and an error set, and is counted as missing at every time point rather than vanishing from the response.",
             "items": {
               "type": "object",
-              "required": ["source", "forecast_points_in_window"],
+              "required": [
+                "source",
+                "forecast_points_in_window"
+              ],
               "properties": {
-                "source": { "type": "string" },
-                "label": { "type": "string" },
+                "source": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
                 "forecast_points_in_window": {
                   "type": "integer",
                   "description": "Numeric readings this source contributed inside the requested hour window. Not the total it returned, which may cover many more hours."
                 },
-                "error": { "type": ["string", "null"] }
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Set when this upstream failed. null when it succeeded."
+                }
               }
             }
           },
           "source_errors": {
             "type": "array",
             "description": "Every upstream failure, named. Empty when all sources succeeded.",
-            "items": { "type": "object" }
+            "items": {
+              "type": "object"
+            }
           },
           "unplaceable_readings": {
             "type": "array",
             "description": "Readings whose timestamp could not be parsed to a UTC hour. Reported, never silently dropped or moved to a convenient time.",
-            "items": { "type": "object" }
+            "items": {
+              "type": "object"
+            }
           },
           "summary": {
             "type": "object",
             "description": "Aggregate across points that produced a band.",
             "properties": {
-              "mean_of_medians_celsius": { "type": ["number", "null"] },
-              "widest_spread_celsius": { "type": ["number", "null"] },
-              "narrowest_spread_celsius": { "type": ["number", "null"] },
+              "mean_of_medians_celsius": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "widest_spread_celsius": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "narrowest_spread_celsius": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "mean_agreement_ratio": {
-                "type": ["number", "null"],
+                "type": [
+                  "number",
+                  "null"
+                ],
                 "description": "Mean over the points that HAVE an agreement value. Points with fewer than three members are excluded rather than counted as zero."
               },
               "agreement_sample_size": {
                 "type": "integer",
                 "description": "How many points contributed to mean_agreement_ratio. Read it alongside the mean."
               },
-              "points_with_band": { "type": "integer" },
-              "points_refused": { "type": "integer" }
+              "points_with_band": {
+                "type": "integer"
+              },
+              "points_refused": {
+                "type": "integer"
+              }
             }
           },
-          "points": { "type": "array", "items": { "$ref": "#/components/schemas/Point" } }
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            }
+          }
         }
       },
       "Identity": {
         "type": "object",
-        "required": ["schema", "status", "service"],
+        "required": [
+          "schema",
+          "status",
+          "service"
+        ],
         "properties": {
-          "schema": { "type": "string" },
-          "status": { "type": "string" },
-          "service": { "type": "object" },
-          "contract": { "type": "object" },
-          "probes": { "type": "object" },
-          "generated_at_utc": { "type": "string", "format": "date-time" }
+          "schema": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "service": {
+            "type": "object"
+          },
+          "contract": {
+            "type": "object"
+          },
+          "probes": {
+            "type": "object"
+          },
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Probe": {
         "type": "object",
-        "required": ["schema", "status", "probe", "checks"],
+        "required": [
+          "schema",
+          "status",
+          "probe",
+          "checks"
+        ],
         "properties": {
-          "schema": { "type": "string" },
-          "status": { "type": "string", "enum": ["OK", "FAILED"] },
-          "probe": { "type": "string", "const": "functional" },
-          "description": { "type": "string" },
-          "latency_ms": { "type": "integer" },
-          "upstream_sources_seen": { "type": "integer" },
+          "schema": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "FAILED"
+            ]
+          },
+          "probe": {
+            "type": "string",
+            "const": "functional"
+          },
+          "description": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": "integer"
+          },
+          "upstream_sources_seen": {
+            "type": "integer"
+          },
           "checks": {
             "type": "array",
             "items": {
               "type": "object",
-              "properties": { "name": { "type": "string" }, "pass": { "type": "boolean" } }
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "pass": {
+                  "type": "boolean"
+                }
+              }
             }
           },
-          "generated_at_utc": { "type": "string", "format": "date-time" }
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Rejection": {
         "type": "object",
-        "required": ["schema", "status", "reason"],
+        "required": [
+          "schema",
+          "status",
+          "reason"
+        ],
         "properties": {
-          "schema": { "type": "string" },
-          "status": { "type": "string", "enum": ["REJECTED", "UNAVAILABLE"] },
-          "reason": { "type": "string" },
-          "details": { "type": ["string", "null"] },
-          "generated_at_utc": { "type": "string", "format": "date-time" }
+          "schema": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "REJECTED",
+              "UNAVAILABLE"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       }
     }

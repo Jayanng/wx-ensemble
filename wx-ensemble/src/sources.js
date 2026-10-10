@@ -12,6 +12,17 @@
 
 const USER_AGENT = 'wx-ensemble/1.0 (pocket-network-service)';
 
+/**
+ * NWS reports Fahrenheit. This is the only unit conversion in the codebase and
+ * it is extracted and exported so it can be tested directly rather than left as
+ * an untested inline expression buried in a network fetcher.
+ *
+ * Returns null for anything that is not a finite number. Never coerces.
+ */
+function fahrenheitToCelsius(raw) {
+  return typeof raw === 'number' && Number.isFinite(raw) ? (raw - 32) * 5 / 9 : null;
+}
+
 /** The six national models Open-Meteo serves in one free call. */
 const OPEN_METEO_MODELS = [
   'icon_seamless',      // Deutscher Wetterdienst (Germany)
@@ -30,7 +41,12 @@ async function fetchOpenMeteo(lat, lon, signal) {
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon),
-    hourly: 'temperature_2m,wind_speed_10m,precipitation_probability',
+    // temperature_2m ONLY. An earlier version also requested wind_speed_10m and
+    // precipitation_probability, downloaded them on every call and never parsed
+    // them. The README says plainly that this service is temperature only, so
+    // asking for fields it does not model was both wasted bandwidth and a
+    // mismatch between the contract and the request.
+    hourly: 'temperature_2m',
     models: OPEN_METEO_MODELS.join(','),
     forecast_days: '2',
     timezone: 'UTC',
@@ -167,7 +183,7 @@ async function fetchNws(lat, lon, signal) {
       return {
         time: p.startTime,
         // NWS reports Fahrenheit. Convert, and label the unit honestly.
-        celsius: typeof raw === 'number' && Number.isFinite(raw) ? (raw - 32) * 5 / 9 : null,
+        celsius: fahrenheitToCelsius(raw),
         sourceUnit: 'F',
       };
     });
@@ -183,6 +199,7 @@ async function fetchNws(lat, lon, signal) {
 
 module.exports = {
   OPEN_METEO_MODELS,
+  fahrenheitToCelsius,
   fetchOpenMeteo,
   fetchMetNo,
   fetchNws,

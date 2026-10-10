@@ -108,7 +108,13 @@ test('agreement_ratio is null below MIN_MEMBERS and the threshold is 2', () => {
 // ---------------------------------------------------------------------------
 
 test('mean_agreement_ratio ignores points that have no agreement value', () => {
-  // Two points: one with two members (no agreement), one with three.
+  // Two points: one with THREE members (agreement exists), one with TWO
+  // (agreement is null and must not be counted as zero).
+  //
+  // The fixture must actually produce that split. An earlier version gave both
+  // points two members, so mean_agreement_ratio came back null, the assertions
+  // sat inside `if (typeof ... === 'number')`, and the test passed without
+  // asserting anything at all.
   const series = [
     {
       source: 's1', label: 'S1',
@@ -122,7 +128,13 @@ test('mean_agreement_ratio ignores points that have no agreement value', () => {
       values: [{ time: '2026-01-01T00:00:00Z', celsius: 11 }],
     },
     {
+      // Third member for hour 0 only, so hour 0 has three members.
       source: 's3', label: 'S3',
+      values: [{ time: '2026-01-01T00:00:00Z', celsius: 10.5 }],
+    },
+    {
+      // And a second member for hour 1, so hour 1 has exactly two.
+      source: 's4', label: 'S4',
       values: [{ time: '2026-01-01T01:00:00Z', celsius: 12 }],
     },
   ];
@@ -134,20 +146,27 @@ test('mean_agreement_ratio ignores points that have no agreement value', () => {
   });
 
   const withBand = out.points.filter((p) => p.status === 'OBSERVED');
-  assert.ok(withBand.length >= 1, 'expected at least one band point');
+  assert.equal(withBand.length, 2, 'both points should carry a band');
 
-  // Points with fewer than three members must not contribute a zero to the mean.
-  for (const p of withBand) {
-    if (p.members_present < 3) {
-      assert.equal(p.agreement_ratio, null);
-    }
-  }
-  if (typeof out.summary.mean_agreement_ratio === 'number') {
-    assert.ok(out.summary.mean_agreement_ratio > 0,
-      'a mean dragged to 0 by coerced nulls would show up here');
-    assert.ok(out.summary.agreement_sample_size >= 1);
-    assert.ok(out.summary.agreement_sample_size <= withBand.length);
-  }
+  // The two-member point must publish no agreement at all.
+  const two = withBand.find((p) => p.members_present === 2);
+  assert.ok(two, 'fixture must produce a two-member point');
+  assert.equal(two.agreement_ratio, null);
+
+  // The three-member point must publish one.
+  const three = withBand.find((p) => p.members_present === 3);
+  assert.ok(three, 'fixture must produce a three-member point');
+  assert.equal(typeof three.agreement_ratio, 'number');
+
+  // Unconditional. If these sit behind a type check the test proves nothing.
+  assert.equal(typeof out.summary.mean_agreement_ratio, 'number',
+    'the mean must be a number, not null');
+  assert.ok(out.summary.mean_agreement_ratio > 0);
+  assert.ok(out.summary.mean_agreement_ratio <= 1);
+  assert.equal(out.summary.agreement_sample_size, 1,
+    'only the three-member point may contribute');
+  // The mean must equal that one point's value exactly, not be diluted.
+  assert.equal(out.summary.mean_agreement_ratio, three.agreement_ratio);
 });
 
 // ---------------------------------------------------------------------------
@@ -300,6 +319,59 @@ test('the confidence label is reproducible from the published thresholds', () =>
     assert.equal(p.confidence, expected,
       `spread ${s} must map to ${expected} using the published thresholds`);
   }
+});
+
+test('the Fahrenheit conversion is exact and refuses non-numbers', () => {
+  // The only unit conversion in the codebase. It was previously an inline
+  // expression inside a network fetcher and was never asserted anywhere.
+  const { fahrenheitToCelsius } = require('../src/sources');
+
+  assert.equal(fahrenheitToCelsius(32), 0, 'freezing point');
+  assert.equal(fahrenheitToCelsius(212), 100, 'boiling point');
+  assert.equal(fahrenheitToCelsius(-40), -40, 'the scales cross at -40');
+  // 77 F is exactly 25 C.
+  assert.equal(fahrenheitToCelsius(77), 25);
+
+  // Non-numbers must come back null and never become 0.
+  assert.equal(fahrenheitToCelsius(null), null);
+  assert.equal(fahrenheitToCelsius(undefined), null);
+  assert.equal(fahrenheitToCelsius('32'), null);
+  assert.equal(fahrenheitToCelsius(NaN), null);
+  assert.equal(fahrenheitToCelsius(Infinity), null);
+});
+
+test('the moderate confidence breakpoint is exercised, not just high and very_low', () => {
+  // The thresholds are published. Every band of them must be reachable or the
+  // disclosure proves less than it appears to.
+  const t = { high: 1.0, moderate: 2.5, low: 5.0 };
+  const cases = [
+    // [member a, member b, expected label]
+    [10.0, 10.5, 'high'],        // spread 0.5
+    [10.0, 12.0, 'moderate'],    // spread 2.0  <- the untested band
+    [10.0, 14.0, 'low'],         // spread 4.0  <- also previously untested
+    [10.0, 17.0, 'very_low'],    // spread 7.0
+  ];
+
+  for (const [a, b, expected] of cases) {
+    const out = aggregatePoint([
+      { source: 'x', value: a },
+      { source: 'y', value: b },
+      { source: 'z', value: (a + b) / 2 },
+    ]);
+    assert.equal(out.status, 'OBSERVED');
+    assert.equal(out.confidence, expected,
+      `spread ${out.spread_celsius} must label as ${expected}`);
+  }
+
+  // And the boundaries themselves must be inclusive as documented.
+  const atBoundary = aggregatePoint([
+    { source: 'x', value: 10 },
+    { source: 'y', value: 12.5 },
+    { source: 'z', value: 11.25 },
+  ]);
+  assert.equal(atBoundary.spread_celsius, 2.5);
+  assert.equal(atBoundary.confidence, 'moderate',
+    'the boundary value must fall in the band that names it, at_or_below');
 });
 
 // ---------------------------------------------------------------------------

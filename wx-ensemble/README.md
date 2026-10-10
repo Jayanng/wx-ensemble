@@ -137,7 +137,7 @@ No dependencies beyond Node.js 22.
 
 ```bash
 node src/server.js          # listens on PORT, default 8787
-npm test                    # 41 tests
+npm test                    # 48 tests
 ```
 
 ---

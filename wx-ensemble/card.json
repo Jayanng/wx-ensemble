@@ -17,7 +17,7 @@
       "kind": "openapi",
       "api": "wx-ensemble-api",
       "url": "https://wx-ensemble.duckdns.org/openapi.json",
-      "sha256": "38d852c38952a38f1ea22aecacefe95f571241bd28bb290e1e9ba2fc6c1a3a2a"
+      "sha256": "74fef22f04cef53ea74213fc5f114157cbbb623dfbb8adef3dfd5b73b7de468b"
     }
   ],
   "access": "public",
